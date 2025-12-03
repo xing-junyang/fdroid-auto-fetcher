@@ -19,6 +19,7 @@ from tasks.metadata_fetcher import MetadataFetcher
 from tasks.repository_manager import RepositoryManager
 from tasks.build_executor import BuildExecutor
 from tasks.cleanup_manager import CleanupManager
+from utils.health_check import HealthCheckServer
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class FDroidAutoBuilder:
         """
         self.running = False
         self.scheduler = None
+        self.health_server = None
         
         # Load configuration
         self.config = self._load_config(config_path)
@@ -110,6 +112,17 @@ class FDroidAutoBuilder:
             cache_retention_days=self.config.getint('cleanup', 'gradle_cache_retention_days', fallback=30),
             max_consecutive_failures=self.config.getint('build', 'max_consecutive_failures', fallback=3)
         )
+        
+        # Health check server (optional)
+        if self.config.getboolean('health_check', 'enable_http_server', fallback=False):
+            self.health_server = HealthCheckServer(
+                path_manager=self.path_manager,
+                database=self.db,
+                scheduler=None,  # Will be set after scheduler is created
+                host=self.config.get('health_check', 'http_host', fallback='0.0.0.0'),
+                port=self.config.getint('health_check', 'http_port', fallback=8080)
+            )
+            logger.info("Health check server configured")
     
     def _setup_scheduler(self):
         """Setup APScheduler with job store."""
@@ -435,6 +448,12 @@ class FDroidAutoBuilder:
         self.running = True
         
         self._setup_scheduler()
+        
+        # Update health server with scheduler reference
+        if self.health_server:
+            self.health_server.scheduler = self.scheduler
+            self.health_server.start()
+        
         self.scheduler.start()
         
         logger.info("Service started successfully")
@@ -456,6 +475,10 @@ class FDroidAutoBuilder:
         if self.scheduler and self.scheduler.running:
             self.scheduler.shutdown(wait=True)
             logger.info("Scheduler stopped")
+        
+        if self.health_server:
+            self.health_server.stop()
+            logger.info("Health check server stopped")
         
         logger.info("Service stopped")
     

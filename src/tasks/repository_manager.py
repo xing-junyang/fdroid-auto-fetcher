@@ -112,9 +112,16 @@ class RepositoryManager:
                 
                 except subprocess.TimeoutExpired:
                     logger.warning(f"[{app_id}] Clone timeout after {self.clone_timeout}s")
-                    # Kill any remaining git processes
+                    # Kill any remaining git processes (cross-platform)
                     try:
-                        subprocess.run(['pkill', '-f', f'git.*{app_id}'], timeout=5)
+                        import psutil
+                        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                            try:
+                                if proc.info['name'] and 'git' in proc.info['name'].lower():
+                                    if proc.info['cmdline'] and app_id in ' '.join(proc.info['cmdline']):
+                                        proc.kill()
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                pass
                     except:
                         pass
                 

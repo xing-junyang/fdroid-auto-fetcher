@@ -2,6 +2,8 @@
 
 A robust, long-running service that automatically fetches F-Droid app source code and performs local Gradle builds with comprehensive error handling and multi-Java version support.
 
+**✨ Fully supports both Windows and Linux!**
+
 ## Features
 
 ✅ **Automated F-Droid Metadata Fetching** - Downloads and parses F-Droid app index  
@@ -13,6 +15,8 @@ A robust, long-running service that automatically fetches F-Droid app source cod
 ✅ **Task Scheduling** - APScheduler with SQLite persistence  
 ✅ **Error Isolation** - Individual app failures never interrupt the main workflow  
 ✅ **Configurable Workspace** - All resources stored in configured directory (non-C drive for Windows)  
+✅ **Health Check HTTP Server** - REST API endpoints for monitoring service status  
+✅ **Cross-Platform** - Windows (gradlew.bat) and Linux (gradlew) support  
 
 ## Architecture
 
@@ -34,36 +38,40 @@ Data Layer
 └── Path Manager
 ```
 
-## Installation
+## Quick Start
 
-### Prerequisites
+### Windows Users
 
-- Python 3.8+
-- Git 2.30+
-- Java JDK (8, 11, and/or 17 recommended)
-- Minimum 200GB disk space
+**See detailed guide:** [WINDOWS_DEPLOYMENT.md](WINDOWS_DEPLOYMENT.md)
 
-### Setup Steps
+```powershell
+# 1. Install dependencies (Python 3.8+, Git, Java)
+# 2. Clone or extract service to D:\fdroid-auto-fetcher
+cd D:\fdroid-auto-fetcher
+pip install -r requirements.txt
 
-1. **Clone or extract the service:**
-   ```bash
-   cd /data/workspace/fdroid-auto-fetcher
-   ```
+# 3. Edit config.ini
+notepad config.ini
 
-2. **Install Python dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+# 4. Run service
+python main.py
+```
 
-3. **Configure the service:**
-   Edit `config.ini` to set your workspace path and preferences:
-   ```ini
-   [workspace]
-   root_path = /data/fdroid_workspace
-   ```
+### Linux Users
 
-4. **Initialize workspace:**
-   The service will automatically create the directory structure on first run.
+**See detailed guide:** [DEPLOYMENT.md](DEPLOYMENT.md)
+
+```bash
+# 1. Install dependencies
+cd /data/workspace/fdroid-auto-fetcher
+./setup.sh
+
+# 2. Edit config.ini
+nano config.ini
+
+# 3. Run service
+python3 main.py
+```
 
 ## Configuration
 
@@ -89,51 +97,58 @@ All configuration is in `config.ini`. Key sections:
 - `inactive_days`: Inactivity threshold (default: `90`)
 - `gradle_cache_retention_days`: Cache retention (default: `30`)
 
-## Usage
+## Health Check Endpoints
 
-### Running the Service
+When health check is enabled in `config.ini`:
 
-**Direct execution:**
-```bash
-python main.py
+```ini
+[health_check]
+enable_http_server = true
+http_port = 8080
 ```
 
-**With custom config:**
+### Available Endpoints
+
+**Health Status:**
 ```bash
-python main.py /path/to/custom/config.ini
+curl http://localhost:8080/health
 ```
 
-### Running as a Systemd Service (Linux)
+Response:
+```json
+{
+  "status": "healthy",
+  "timestamp": "2024-01-01T12:00:00",
+  "disk_free_gb": 150.5,
+  "disk_usage_percent": 25.3,
+  "total_apps": 100,
+  "scheduler_running": true
+}
+```
 
-1. Create service file `/etc/systemd/system/fdroid-builder.service`:
-   ```ini
-   [Unit]
-   Description=F-Droid Auto-Builder Service
-   After=network.target
+**Detailed Statistics:**
+```bash
+curl http://localhost:8080/stats
+```
 
-   [Service]
-   Type=simple
-   User=fdroid
-   WorkingDirectory=/data/workspace/fdroid-auto-fetcher
-   ExecStart=/usr/bin/python3 main.py
-   Restart=always
-   RestartSec=10
+**Simple Ping:**
+```bash
+curl http://localhost:8080/ping
+```
 
-   [Install]
-   WantedBy=multi-user.target
-   ```
+## Platform-Specific Notes
 
-2. Enable and start:
-   ```bash
-   sudo systemctl daemon-reload
-   sudo systemctl enable fdroid-builder
-   sudo systemctl start fdroid-builder
-   ```
+### Windows
+- Uses `gradlew.bat` for builds
+- Detects Java in `C:\Program Files\Java` and `D:\Java`
+- Supports NSSM for service management
+- See [WINDOWS_DEPLOYMENT.md](WINDOWS_DEPLOYMENT.md) for complete guide
 
-3. Check status:
-   ```bash
-   sudo systemctl status fdroid-builder
-   ```
+### Linux
+- Uses `gradlew` (chmod +x applied automatically)
+- Detects Java in `/usr/lib/jvm`, `/usr/java`, `/opt/java`
+- Supports systemd for service management
+- See [DEPLOYMENT.md](DEPLOYMENT.md) for complete guide
 
 ## Directory Structure
 

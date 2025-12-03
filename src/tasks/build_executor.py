@@ -67,11 +67,18 @@ class BuildExecutor:
                 java_versions['default'] = java_home
         
         # Try to find Java installations in common locations
-        common_paths = [
-            '/usr/lib/jvm',
-            '/usr/java',
-            '/opt/java',
-        ]
+        if os.name == 'nt':  # Windows
+            common_paths = [
+                'C:\\Program Files\\Java',
+                'C:\\Program Files (x86)\\Java',
+                'D:\\Java',
+            ]
+        else:  # Linux/Unix
+            common_paths = [
+                '/usr/lib/jvm',
+                '/usr/java',
+                '/opt/java',
+            ]
         
         for base_path in common_paths:
             if not Path(base_path).exists():
@@ -154,17 +161,22 @@ class BuildExecutor:
         Returns:
             True if checks pass
         """
-        # Check gradlew exists
-        gradlew = repo_path / 'gradlew'
+        # Check gradlew exists (Windows: gradlew.bat, Unix: gradlew)
+        if os.name == 'nt':
+            gradlew = repo_path / 'gradlew.bat'
+        else:
+            gradlew = repo_path / 'gradlew'
+        
         if not gradlew.exists():
             logger.error(f"[{app_id}] gradlew not found")
             return False
         
-        # Make gradlew executable
-        try:
-            gradlew.chmod(0o755)
-        except Exception as e:
-            logger.warning(f"[{app_id}] Failed to chmod gradlew: {e}")
+        # Make gradlew executable (Unix only)
+        if os.name != 'nt':
+            try:
+                gradlew.chmod(0o755)
+            except Exception as e:
+                logger.warning(f"[{app_id}] Failed to chmod gradlew: {e}")
         
         # Check build.gradle exists
         build_gradle = repo_path / 'build.gradle'
@@ -200,7 +212,11 @@ class BuildExecutor:
             env['GRADLE_USER_HOME'] = str(self.gradle_cache_dir)
         
         # Build command
-        gradlew = repo_path / 'gradlew'
+        if os.name == 'nt':
+            gradlew = repo_path / 'gradlew.bat'
+        else:
+            gradlew = repo_path / 'gradlew'
+        
         cmd = [str(gradlew), 'assembleRelease', '--stacktrace']
         
         # Ensure log directory exists
