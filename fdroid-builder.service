@@ -1,0 +1,26 @@
+[Unit]
+Description=F-Droid Auto-Builder Service
+Documentation=https://github.com/yourorg/fdroid-auto-fetcher
+After=network.target
+
+[Service]
+Type=simple
+User=fdroid
+Group=fdroid
+WorkingDirectory=/data/workspace/fdroid-auto-fetcher
+ExecStart=/usr/bin/python3 /data/workspace/fdroid-auto-fetcher/main.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fdroid-builder
+
+# Resource limits (optional)
+LimitNOFILE=65536
+MemoryLimit=8G
+
+# Environment variables
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target
