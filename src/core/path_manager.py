@@ -25,7 +25,7 @@ class PathManager:
         Raises:
             ValueError: If workspace_root is on C: drive and validation is enabled
         """
-        self.workspace_root = Path(workspace_root).resolve()
+        self.workspace_root = Path(workspace_root)
         
         # Validate non-C drive requirement for Windows
         if validate_non_c_drive and os.name == 'nt':

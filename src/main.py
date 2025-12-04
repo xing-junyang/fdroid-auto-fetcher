@@ -3,12 +3,13 @@ Main service controller for F-Droid Auto-Builder.
 """
 
 import logging
+import random
 import signal
 import sys
 import configparser
 import time
 from pathlib import Path
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 
@@ -126,16 +127,11 @@ class FDroidAutoBuilder:
     
     def _setup_scheduler(self):
         """Setup APScheduler with job store."""
-        jobstores = {
-            'default': SQLAlchemyJobStore(url=f'sqlite:///{self.path_manager.scheduler_db_path}')
-        }
-        
         self.scheduler = BackgroundScheduler(
-            jobstores=jobstores,
             job_defaults={
                 'coalesce': True,
                 'max_instances': 1,
-                'misfire_grace_time': 3600
+                'misfire_grace_time': 3600,
             }
         )
         
@@ -146,7 +142,8 @@ class FDroidAutoBuilder:
             hours=self.config.getint('scheduler', 'fetch_metadata_interval_hours', fallback=24),
             id='fetch_metadata',
             name='Fetch F-Droid Metadata',
-            replace_existing=True
+            replace_existing=True,
+            next_run_time=datetime.now()  # 立即执行
         )
         
         self.scheduler.add_job(
@@ -155,7 +152,8 @@ class FDroidAutoBuilder:
             hours=self.config.getint('scheduler', 'clone_repos_interval_hours', fallback=6),
             id='clone_repos',
             name='Clone New Repositories',
-            replace_existing=True
+            replace_existing=True,
+            next_run_time=datetime.now() + timedelta(seconds=30)  # 30秒后执行
         )
         
         self.scheduler.add_job(
@@ -164,7 +162,8 @@ class FDroidAutoBuilder:
             hours=self.config.getint('scheduler', 'update_repos_interval_hours', fallback=12),
             id='update_repos',
             name='Update Repositories',
-            replace_existing=True
+            replace_existing=True,
+            next_run_time=datetime.now() + timedelta(minutes=1)  # 1分钟后执行
         )
         
         self.scheduler.add_job(
@@ -174,7 +173,8 @@ class FDroidAutoBuilder:
             id='build_apps',
             name='Build Applications',
             max_instances=self.config.getint('build', 'max_concurrent_builds', fallback=3),
-            replace_existing=True
+            replace_existing=True,
+            next_run_time=datetime.now() + timedelta(minutes=2)  # 2分钟后执行
         )
         
         self.scheduler.add_job(
@@ -276,6 +276,8 @@ class FDroidAutoBuilder:
                 except Exception as e:
                     logger.error(f"Clone error for {app['app_id']}: {e}", exc_info=True)
                     failed_count += 1
+
+                time.sleep(random.uniform(1, 5))
             
             result_summary = {'success': success_count, 'failed': failed_count}
             self.db.end_task_execution(task_id, 'completed', result_summary)
@@ -317,6 +319,8 @@ class FDroidAutoBuilder:
                 except Exception as e:
                     logger.error(f"Update error for {app['app_id']}: {e}", exc_info=True)
                     failed_count += 1
+
+                time.sleep(random.uniform(1, 5))
             
             result_summary = {'success': success_count, 'failed': failed_count}
             self.db.end_task_execution(task_id, 'completed', result_summary)
@@ -455,6 +459,11 @@ class FDroidAutoBuilder:
             self.health_server.start()
         
         self.scheduler.start()
+        
+        logger.info("Service started successfully")
+
+        logger.info(f"Scheduler state: {self.scheduler.state}")
+        logger.info(f"Number of scheduled jobs: {len(self.scheduler.get_jobs())}")
         
         logger.info("Service started successfully")
         

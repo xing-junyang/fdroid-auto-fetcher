@@ -366,7 +366,7 @@ class Database:
                     """
                     SELECT * FROM app_info 
                     WHERE (
-                        build_status = 'never_built'
+                        (build_status = 'never_built' AND last_fetch_time IS NOT NULL)
                         OR (build_status = 'success' AND 
                             (last_build_time IS NULL OR 
                              julianday('now') - julianday(last_build_time) > 7))

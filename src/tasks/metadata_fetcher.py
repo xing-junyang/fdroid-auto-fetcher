@@ -81,19 +81,12 @@ class MetadataFetcher:
         Returns:
             List of app dictionaries with app_id and git_url
         """
-        apps = []
-        packages = index_data.get('packages', {})
+        extrated_apps = []
+        apps = index_data.get('apps', {})
         
-        for package_name, versions in packages.items():
-            if not versions:
-                continue
-            
-            # Get latest version
-            latest = versions[0] if isinstance(versions, list) else versions
-            
-            # Extract source code URL
-            source_url = latest.get('sourceCode') or latest.get('webSite')
-            
+        for app in apps:
+
+            source_url = app.get('sourceCode')
             if not source_url:
                 continue
             
@@ -102,13 +95,13 @@ class MetadataFetcher:
                 if not self._is_git_url(source_url):
                     continue
             
-            apps.append({
-                'app_id': package_name,
-                'git_url': source_url
+            extrated_apps.append({
+                'app_id': app.get('packageName'),
+                'git_url': source_url,
             })
         
-        logger.info(f"Extracted {len(apps)} apps with source code URLs")
-        return apps
+        logger.info(f"Extracted {len(extrated_apps)} apps with source code URLs")
+        return extrated_apps
     
     def _is_git_url(self, url: str) -> bool:
         """Check if URL is a Git repository."""
@@ -120,8 +113,11 @@ class MetadataFetcher:
             '.git',
             '/git/',
         ]
+        blacklist = [
+            'framagit.org'
+        ]
         url_lower = url.lower()
-        return any(indicator in url_lower for indicator in git_indicators)
+        return any(indicator in url_lower for indicator in git_indicators) and not any(indicator in url_lower for indicator in blacklist)
     
     def validate_url(self, url: str) -> bool:
         """

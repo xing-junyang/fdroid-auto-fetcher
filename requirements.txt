@@ -1,14 +1,9 @@
-# Core dependencies
+
 APScheduler>=3.9.0
 GitPython>=3.1.0
 requests>=2.28.0
 psutil>=5.9.0
 
-# Optional: Health check HTTP server
 Flask>=2.0.0
 
-# Database
-# SQLite is included in Python standard library
-
-# Utilities
 python-dateutil>=2.8.0

@@ -67,36 +67,39 @@ class BuildExecutor:
                 java_versions['default'] = java_home
         
         # Try to find Java installations in common locations
-        if os.name == 'nt':  # Windows
-            common_paths = [
-                'C:\\Program Files\\Java',
-                'C:\\Program Files (x86)\\Java',
-                'D:\\Java',
-            ]
-        else:  # Linux/Unix
-            common_paths = [
-                '/usr/lib/jvm',
-                '/usr/java',
-                '/opt/java',
-            ]
-        
+        common_paths = [
+            'C:\\Program Files\\Java',
+            'C:\\Program Files (x86)\\Java',
+            'D:\\Java',
+        ]
+
         for base_path in common_paths:
-            if not Path(base_path).exists():
+            base = Path(base_path)
+            if not base.exists():
                 continue
-            
-            for entry in Path(base_path).iterdir():
-                if entry.is_dir() and 'java' in entry.name.lower():
-                    # Try to determine version
-                    if 'jdk-17' in entry.name or 'java-17' in entry.name:
-                        if 'jdk17' not in java_versions:
-                            java_versions['jdk17'] = str(entry)
-                    elif 'jdk-11' in entry.name or 'java-11' in entry.name:
-                        if 'jdk11' not in java_versions:
-                            java_versions['jdk11'] = str(entry)
-                    elif 'jdk-8' in entry.name or 'java-8' in entry.name or 'jdk1.8' in entry.name:
-                        if 'jdk8' not in java_versions:
-                            java_versions['jdk8'] = str(entry)
-        
+
+            for entry in base.iterdir():
+                if not entry.is_dir():
+                    continue
+
+                name = entry.name.lower()
+
+                # jdk-21
+                if name.startswith("jdk-21"):
+                    java_versions.setdefault("jdk21", str(entry))
+
+                # jdk-17
+                elif name.startswith("jdk-17"):
+                    java_versions.setdefault("jdk17", str(entry))
+
+                # jdk-11
+                elif name.startswith("jdk-11"):
+                    java_versions.setdefault("jdk11", str(entry))
+
+                # jdk1.8.0_xxx
+                elif name.startswith("jdk1.8") or name.startswith("jdk-8"):
+                    java_versions.setdefault("jdk8", str(entry))
+
         return java_versions
     
     def build_app(
@@ -118,6 +121,7 @@ class BuildExecutor:
         """
         # Pre-build checks
         if not self._pre_build_check(repo_path, app_id):
+            logger.info(f"[{app_id}] Pre-build checks failed")
             return False, None, "Pre-build checks failed", None
         
         # Try each Java version
@@ -125,6 +129,7 @@ class BuildExecutor:
         
         for java_version in java_priority:
             if java_version not in self.java_versions:
+                logger.warning(f"[{app_id}] Skipping {java_version}, as it is not installed")
                 continue
             
             java_home = self.java_versions[java_version]
@@ -150,6 +155,38 @@ class BuildExecutor:
         
         return False, None, "All Java versions failed", None
     
+    def _find_gradlew(self, repo_path: Path) -> Optional[Path]:
+        """
+        Recursively find gradlew or gradlew.bat in the repository.
+        
+        Args:
+            repo_path: Repository directory path
+            
+        Returns:
+            Path to gradlew script or None if not found
+        """
+        # First check root directory
+        if os.name == 'nt':
+            gradlew = repo_path / 'gradlew.bat'
+        else:
+            gradlew = repo_path / 'gradlew'
+        
+        if gradlew.exists():
+            return gradlew
+        
+        # Recursively search in subdirectories
+        try:
+            if os.name == 'nt':
+                for file_path in repo_path.rglob('gradlew.bat'):
+                    return file_path
+            else:
+                for file_path in repo_path.rglob('gradlew'):
+                    return file_path
+        except Exception as e:
+            logger.warning(f"Error while searching for gradlew: {e}")
+        
+        return None
+    
     def _pre_build_check(self, repo_path: Path, app_id: str) -> bool:
         """
         Perform pre-build environment checks.
@@ -162,12 +199,9 @@ class BuildExecutor:
             True if checks pass
         """
         # Check gradlew exists (Windows: gradlew.bat, Unix: gradlew)
-        if os.name == 'nt':
-            gradlew = repo_path / 'gradlew.bat'
-        else:
-            gradlew = repo_path / 'gradlew'
+        gradlew = self._find_gradlew(repo_path)
         
-        if not gradlew.exists():
+        if not gradlew:
             logger.error(f"[{app_id}] gradlew not found")
             return False
         
@@ -182,9 +216,13 @@ class BuildExecutor:
         build_gradle = repo_path / 'build.gradle'
         build_gradle_kts = repo_path / 'build.gradle.kts'
         
+        # Also check recursively for build.gradle
         if not (build_gradle.exists() or build_gradle_kts.exists()):
-            logger.error(f"[{app_id}] build.gradle not found")
-            return False
+            gradle_files = list(repo_path.rglob('build.gradle'))
+            gradle_kts_files = list(repo_path.rglob('build.gradle.kts'))
+            if not (gradle_files or gradle_kts_files):
+                logger.error(f"[{app_id}] build.gradle not found")
+                return False
         
         return True
     
@@ -212,10 +250,10 @@ class BuildExecutor:
             env['GRADLE_USER_HOME'] = str(self.gradle_cache_dir)
         
         # Build command
-        if os.name == 'nt':
-            gradlew = repo_path / 'gradlew.bat'
-        else:
-            gradlew = repo_path / 'gradlew'
+        gradlew = self._find_gradlew(repo_path)
+        
+        if not gradlew:
+            raise FileNotFoundError("gradlew script not found in repository")
         
         cmd = [str(gradlew), 'assembleRelease', '--stacktrace']
         
@@ -330,6 +368,7 @@ class BuildExecutor:
             'jdk version',
             'compilesdkversion',
         ]
+        logger.debug(f"Checking error message for Java version: {error_msg}")
         
         error_lower = error_msg.lower()
         return any(pattern in error_lower for pattern in java_error_patterns)
